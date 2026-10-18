@@ -11,6 +11,66 @@ const {
 const { register, login } = require('../controllers/authController');
 const { createPlace, getMyPlaces } = require('../controllers/placeController');
 const { verifyToken, requireMerchant } = require('../middlewares/authMiddleware');
+const { addFavorite, removeFavorite, getMyFavorites } = require('../controllers/favoriteController');
+
+/**
+ * @openapi
+ * /api/favorites:
+ *   get:
+ *     summary: Отримати список збережених акцій користувача
+ *     tags: [Favorites]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Список обраних акцій
+ */
+router.get('/favorites', verifyToken, getMyFavorites);
+
+/**
+ * @openapi
+ * /api/favorites:
+ *   post:
+ *     summary: Додати акцію в обране
+ *     tags: [Favorites]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [promotion_id]
+ *             properties:
+ *               promotion_id:
+ *                 type: integer
+ *                 example: 1
+ *     responses:
+ *       201:
+ *         description: Успішно додано в обране
+ */
+router.post('/favorites', verifyToken, addFavorite);
+
+/**
+ * @openapi
+ * /api/favorites/{promotion_id}:
+ *   delete:
+ *     summary: Видалити акцію з обраного
+ *     tags: [Favorites]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: promotion_id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Видалено з обраного
+ */
+router.delete('/favorites/:promotion_id', verifyToken, removeFavorite);
 
 /**
  * @openapi
