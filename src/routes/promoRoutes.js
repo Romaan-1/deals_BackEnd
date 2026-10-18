@@ -12,6 +12,57 @@ const { register, login } = require('../controllers/authController');
 const { createPlace, getMyPlaces } = require('../controllers/placeController');
 const { verifyToken, requireMerchant } = require('../middlewares/authMiddleware');
 const { addFavorite, removeFavorite, getMyFavorites } = require('../controllers/favoriteController');
+const { getAllUsers, updateUserRole } = require('../controllers/adminController');
+const { requireAdmin } = require('../middlewares/authMiddleware');
+
+const { getPlaceById, getPopularPlaces } = require('../controllers/placeController');
+
+router.get('/places/popular', getPopularPlaces);
+router.get('/places/:id', getPlaceById);
+
+/**
+ * @openapi
+ * /api/admin/users:
+ *   get:
+ *     summary: Отримати список усіх користувачів (Тільки Admin)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Список користувачів
+ */
+router.get('/admin/users', verifyToken, requireAdmin, getAllUsers);
+
+/**
+ * @openapi
+ * /api/admin/users/{id}/role:
+ *   put:
+ *     summary: Змінити роль користувача (Тільки Admin)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               role:
+ *                 type: string
+ *                 enum: [user, merchant, admin]
+ *     responses:
+ *       200:
+ *         description: Роль змінено
+ */
+router.put('/admin/users/:id/role', verifyToken, requireAdmin, updateUserRole);
 
 /**
  * @openapi
