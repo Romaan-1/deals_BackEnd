@@ -1,8 +1,57 @@
 const db = require('../config/db');
 
-// Отримати один заклад та всі його акції за ID
+// 1. Створити новий заклад (Merchant / Admin)
+const createPlace = async (req, res) => {
+    const { region_id, category_id, name, address, logo_url, banner_url } = req.body;
+    const owner_id = req.user.id;
+
+    if (!region_id || !category_id || !name || !address) {
+        return res.status(400).json({ error: 'Заповніть усі обовʼязкові поля' });
+    }
+
+    try {
+        const result = await db.query(
+            `INSERT INTO places (owner_id, region_id, category_id, name, address, logo_url, banner_url)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING *`,
+            [
+                owner_id,
+                region_id,
+                category_id,
+                name,
+                address,
+                logo_url || '🥐',
+                banner_url || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5'
+            ]
+        );
+
+        res.status(201).json(result.rows[0]);
+    } catch (error) {
+        console.error('Помилка створення закладу:', error);
+        res.status(500).json({ error: 'Помилка сервера при створенні закладу' });
+    }
+};
+
+// 2. Отримати заклади поточного продавця
+const getMyPlaces = async (req, res) => {
+    const owner_id = req.user.id;
+
+    try {
+        const result = await db.query(
+            'SELECT * FROM places WHERE owner_id = $1 ORDER BY id DESC',
+            [owner_id]
+        );
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Помилка отримання власних закладів:', error);
+        res.status(500).json({ error: 'Помилка сервера' });
+    }
+};
+
+// 3. Отримати один заклад за ID та його активні акції
 const getPlaceById = async (req, res) => {
     const { id } = req.params;
+
     try {
         const placeQuery = `
       SELECT p.*, r.name AS region_name, c.name AS category_name
@@ -29,12 +78,12 @@ const getPlaceById = async (req, res) => {
             promotions: promosResult.rows
         });
     } catch (error) {
-        console.error('Помилка отримання закладу:', error);
+        console.error('Помилка отримання сторінки закладу:', error);
         res.status(500).json({ error: 'Помилка сервера' });
     }
 };
 
-// Отримати популярні заклади для головної сторінки
+// 4. Отримати популярні заклади для головної сторінки
 const getPopularPlaces = async (req, res) => {
     try {
         const query = `
@@ -47,9 +96,14 @@ const getPopularPlaces = async (req, res) => {
         const result = await db.query(query);
         res.json(result.rows);
     } catch (error) {
-        console.error('Помилка отримання закладах:', error);
+        console.error('Помилка отримання популярних закладів:', error);
         res.status(500).json({ error: 'Помилка сервера' });
     }
 };
 
-module.exports = { getPlaceById, getPopularPlaces };
+module.exports = {
+    createPlace,
+    getMyPlaces,
+    getPlaceById,
+    getPopularPlaces
+};

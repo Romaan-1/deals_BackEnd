@@ -33,4 +33,8 @@ const requireMerchant = (req, res, next) => {
     }
 };
 
-module.exports = { verifyToken, requireAdmin, requireMerchant };
+module.exports = {
+    verifyToken,
+    requireAdmin,
+    requireMerchant
+};

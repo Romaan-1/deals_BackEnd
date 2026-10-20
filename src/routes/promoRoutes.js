@@ -1,24 +1,27 @@
 const express = require('express');
 const router = express.Router();
 
-const {
-    getPromotions,
-    createPromotion,
-    updatePromotion,
-    deletePromotion
-} = require('../controllers/promoController');
-
 const { register, login } = require('../controllers/authController');
-const { createPlace, getMyPlaces } = require('../controllers/placeController');
-const { verifyToken, requireMerchant } = require('../middlewares/authMiddleware');
-const { addFavorite, removeFavorite, getMyFavorites } = require('../controllers/favoriteController');
-const { getAllUsers, updateUserRole } = require('../controllers/adminController');
-const { requireAdmin } = require('../middlewares/authMiddleware');
+const { getPromotions, createPromotion, updatePromotion, deletePromotion } = require('../controllers/promoController');
 
-const { getPlaceById, getPopularPlaces } = require('../controllers/placeController');
+const { createPlace, getMyPlaces, getPlaceById, getPopularPlaces } = require('../controllers/placeController');
+
+const { addFavorite, removeFavorite, getMyFavorites } = require('../controllers/favoriteController');
+
+const { getAllUsers, updateUserRole, approvePlace, getPendingPlaces } = require('../controllers/adminController');
+
+const { verifyToken, requireAdmin, requireMerchant } = require('../middlewares/authMiddleware');
+const { getRegions, syncCitiesFromNovaPoshta } = require('../controllers/regionController');
+
+router.get('/regions', getRegions);
+router.post('/regions/sync', syncCitiesFromNovaPoshta);
 
 router.get('/places/popular', getPopularPlaces);
+
 router.get('/places/:id', getPlaceById);
+
+router.post('/places', verifyToken, createPlace);
+
 
 /**
  * @openapi
@@ -330,7 +333,7 @@ router.delete('/promotions/:id', verifyToken, requireMerchant, deletePromotion);
  *       201:
  *         description: Заклад створено
  */
-router.post('/places', verifyToken, requireMerchant, createPlace);
+router.post('/admin/places/:id/approve', verifyToken, requireAdmin, approvePlace);
 
 /**
  * @openapi
