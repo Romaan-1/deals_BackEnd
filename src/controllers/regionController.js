@@ -1,6 +1,24 @@
 const db = require('../config/db');
 
-// 1. Живий пошук міст із лімітом вигрузки (Autocomplete)
+// Генерація slug для таблиці regions
+const slugify = (text) => {
+    const cyrToLat = {
+        'а': 'a', 'б': 'b', 'в': 'v', 'г': 'h', 'ґ': 'g', 'д': 'd', 'е': 'e', 'є': 'ye',
+        'ж': 'zh', 'з': 'z', 'и': 'y', 'і': 'i', 'ї': 'yi', 'й': 'y', 'к': 'k', 'л': 'l',
+        'м': 'm', 'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u',
+        'ф': 'f', 'х': 'kh', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'shch', 'ь': '', 'ю': 'yu', 'я': 'ya'
+    };
+    return text
+        .toLowerCase()
+        .split('')
+        .map(char => cyrToLat[char] || char)
+        .join('')
+        .replace(/[^a-z0-9 -]/g, '')
+        .replace(/\s+/g, '-')
+        .replace(/-+/g, '-');
+};
+
+// Пошук та отримання міст
 const getRegions = async (req, res) => {
     const { search } = req.query;
 
@@ -8,45 +26,40 @@ const getRegions = async (req, res) => {
         let query = 'SELECT * FROM regions';
         const params = [];
 
-        // Якщо користувач щось ввів у пошук
         if (search && search.trim() !== '') {
             query += ' WHERE name ILIKE $1 ORDER BY name ASC LIMIT 15';
             params.push(`%${search.trim()}%`);
         } else {
-            // За замовчуванням показуємо перші 20 популярних міст
             query += ' ORDER BY id ASC LIMIT 20';
         }
 
         const result = await db.query(query, params);
         res.json(result.rows);
     } catch (error) {
-        console.error('Помилка пошуку міст:', error);
-        res.status(500).json({ error: 'Помилка сервера при пошуку міст' });
+        console.error('Помилка отримання міст:', error);
+        res.status(500).json({ error: 'Помилка сервера' });
     }
 };
 
-// 2. Створення/додавання нового міста
+// Додавання нового міста
 const createRegion = async (req, res) => {
     const { name } = req.body;
 
-    if (!name || name.trim() === '') {
+    if (!name || !name.trim()) {
         return res.status(400).json({ error: 'Вкажіть назву міста' });
     }
 
-    try {
-        // Вставляємо місто або повертаємо існуюче
-        const result = await db.query(
-            `INSERT INTO regions (name) 
-       VALUES ($1) 
-       ON CONFLICT (name) DO NOTHING 
-       RETURNING *`,
-            [name.trim()]
-        );
+    const cityName = name.trim();
+    const citySlug = slugify(cityName);
 
-        if (result.rows.length === 0) {
-            const existing = await db.query('SELECT * FROM regions WHERE LOWER(name) = LOWER($1)', [name.trim()]);
-            return res.json(existing.rows[0]);
-        }
+    try {
+        const result = await db.query(
+            `INSERT INTO regions (name, slug) 
+       VALUES ($1, $2) 
+       ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name 
+       RETURNING *`,
+            [cityName, citySlug]
+        );
 
         res.status(201).json(result.rows[0]);
     } catch (error) {

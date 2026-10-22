@@ -11,10 +11,10 @@ const { addFavorite, removeFavorite, getMyFavorites } = require('../controllers/
 const { getAllUsers, updateUserRole, approvePlace, getPendingPlaces } = require('../controllers/adminController');
 
 const { verifyToken, requireAdmin, requireMerchant } = require('../middlewares/authMiddleware');
-const { getRegions, syncCitiesFromNovaPoshta } = require('../controllers/regionController');
+const { getRegions, createRegion } = require('../controllers/regionController');
 
 router.get('/regions', getRegions);
-router.post('/regions/sync', syncCitiesFromNovaPoshta);
+router.post('/regions', createRegion);
 
 router.get('/places/popular', getPopularPlaces);
 
