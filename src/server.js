@@ -5,11 +5,33 @@ const swaggerUi = require('swagger-ui-express');
 
 const app = express();
 
-// Базові мідлвари
 app.use(cors());
 app.use(express.json());
+const path = require('path');
 
-// 📖 Повна конфігурація Swagger OpenAPI 3.0 для всього проєкту
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+
+const db = require('./config/db');
+const rateLimit = require('express-rate-limit');
+
+// Обмеження: максимум 100 запитів з однієї IP-адреси за 15 хвилин
+const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    message: { error: 'Забагато запитів з вашої IP-адреси. Спробуйте через 15 хвилин.' }
+});
+
+// Обмеження для входу/реєстрації: максимум 10 спроб на 15 хвилин
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    message: { error: 'Забагато спроб входу. Спробуйте пізніше.' }
+});
+
+// Застосовуємо мідлвари
+app.use('/api/', apiLimiter);
+app.use('/api/auth/', authLimiter);
+
 const swaggerDocument = {
     openapi: '3.0.0',
     info: {
