@@ -2,29 +2,15 @@ const db = require('../config/db');
 
 // 1. Створити новий заклад (Merchant / Admin)
 const createPlace = async (req, res) => {
-    const { region_id, category_id, name, address, logo_url, banner_url } = req.body;
-    const owner_id = req.user.id;
-
-    if (!region_id || !category_id || !name || !address) {
-        return res.status(400).json({ error: 'Заповніть усі обовʼязкові поля' });
-    }
+    const { name, address, category_id, region_id, logo_url } = req.body;
+    const merchant_id = req.user.id;
 
     try {
         const result = await db.query(
-            `INSERT INTO places (owner_id, region_id, category_id, name, address, logo_url, banner_url)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING *`,
-            [
-                owner_id,
-                region_id,
-                category_id,
-                name,
-                address,
-                logo_url || '🥐',
-                banner_url || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5'
-            ]
+            `INSERT INTO places (name, address, category_id, region_id, merchant_id, logo_url) 
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+            [name, address, category_id, region_id, merchant_id, logo_url || '🥐']
         );
-
         res.status(201).json(result.rows[0]);
     } catch (error) {
         console.error('Помилка створення закладу:', error);
@@ -107,3 +93,4 @@ module.exports = {
     getPlaceById,
     getPopularPlaces
 };
+
