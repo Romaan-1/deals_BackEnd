@@ -51,35 +51,16 @@ const getPromotions = async (req, res) => {
 
 // 2. Створення нової акції
 const createPromotion = async (req, res) => {
-    const { place_id, title, description, discount_value, start_date, end_date } = req.body;
-
-    if (!place_id || !title || !discount_value || !start_date || !end_date) {
-        return res.status(400).json({ error: 'Заповніть усі обовʼязкові поля' });
-    }
+    const { place_id, title, description, discount_value, image_url, link_url, start_date, end_date } = req.body;
 
     try {
-        // Перевіряємо, чи цей заклад дійсно належить поточному користувачу (або користувач — адмін)
-        const placeCheck = await db.query('SELECT * FROM places WHERE id = $1', [place_id]);
-
-        if (placeCheck.rows.length === 0) {
-            return res.status(404).json({ error: 'Заклад не знайдено' });
-        }
-
-        if (placeCheck.rows[0].user_id !== req.user.id && req.user.role !== 'admin') {
-            return res.status(403).json({ error: 'Ви не можете додавати акції для чужого закладу' });
-        }
-
-        const newPromo = await db.query(
-            `INSERT INTO promotions (place_id, title, description, discount_value, start_date, end_date)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING *`,
-            [place_id, title, description || '', discount_value, start_date, end_date]
+        const result = await db.query(
+            `INSERT INTO promotions (place_id, title, description, discount_value, image_url, link_url, start_date, end_date)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+            [place_id, title, description || '', discount_value, image_url || '', link_url || '', start_date, end_date]
         );
 
-        res.status(201).json({
-            message: 'Акцію успішно створено!',
-            promotion: newPromo.rows[0]
-        });
+        res.status(201).json(result.rows[0]);
     } catch (error) {
         console.error('Помилка створення акції:', error);
         res.status(500).json({ error: 'Помилка сервера при створенні акції' });

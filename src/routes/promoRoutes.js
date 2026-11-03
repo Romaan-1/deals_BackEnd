@@ -12,6 +12,9 @@ const { getAllUsers, updateUserRole, approvePlace, getPendingPlaces } = require(
 
 const { verifyToken, requireAdmin, requireMerchant } = require('../middlewares/authMiddleware');
 const { getRegions, createRegion } = require('../controllers/regionController');
+const authController = require('../controllers/authController');
+router.post('/auth/forgot-password', authController.forgotPassword);
+router.post('/auth/reset-password', authController.resetPassword);
 
 router.get('/regions', getRegions);
 router.post('/regions', createRegion);
