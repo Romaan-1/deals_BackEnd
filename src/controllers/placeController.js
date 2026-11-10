@@ -3,7 +3,7 @@ const db = require('../config/db');
 // 🏬 1. Створення закладу
 const createPlace = async (req, res) => {
     const { name, address, category_id, region_id, logo_url } = req.body;
-    const merchant_id = req.user.id; // Отримуємо z JWT
+    const merchant_id = req.user.id;
 
     try {
         if (!name || !address || !category_id || !region_id) {
@@ -14,23 +14,23 @@ const createPlace = async (req, res) => {
             `INSERT INTO places (name, address, category_id, region_id, merchant_id, logo_url, is_verified) 
        VALUES ($1, $2, $3, $4, $5, $6, $7) 
        RETURNING *`,
-            [name, address, parseInt(category_id, 10), parseInt(region_id, 10), merchant_id, logo_url || '', false]
+            [name, address, parseInt(category_id, 10), parseInt(region_id, 10), merchant_id, logo_url || '', true]
         );
 
         res.status(201).json(result.rows[0]);
     } catch (error) {
-        console.error('  Помилка створення закладу:', error);
+        console.error('❌ Помилка створення закладу:', error);
         res.status(500).json({ error: 'Помилка сервера при створенні закладу' });
     }
 };
 
-// 🔥 2. Отримання популярних / підтверджених закладів
+// 🔥 2. Популярні заклади
 const getPopularPlaces = async (req, res) => {
     try {
         const result = await db.query('SELECT * FROM places WHERE is_verified = true ORDER BY rating DESC LIMIT 10');
         res.json(result.rows);
     } catch (error) {
-        console.error('  Помилка завантаження закладів:', error);
+        console.error('❌ Помилка завантаження закладів:', error);
         res.status(500).json({ error: 'Помилка сервера' });
     }
 };
@@ -45,47 +45,24 @@ const getPlaceById = async (req, res) => {
         }
         res.json(result.rows[0]);
     } catch (error) {
-        console.error('  Помилка отримання закладу:', error);
+        console.error('❌ Помилка отримання закладу:', error);
         res.status(500).json({ error: 'Помилка сервера' });
     }
 };
 
-// 💼 4. Отримання власних закладів мерчанта
+// 💼 4. Мої заклади (для продавця)
 const getMyPlaces = async (req, res) => {
     const merchant_id = req.user.id;
     try {
         const result = await db.query('SELECT * FROM places WHERE merchant_id = $1 ORDER BY id DESC', [merchant_id]);
         res.json(result.rows);
     } catch (error) {
-        console.error('  Помилка завантаження моїх закладів:', error);
+        console.error('❌ Помилка завантаження моїх закладів:', error);
         res.status(500).json({ error: 'Помилка сервера' });
     }
 };
 
-// 🛡️ 5. Заклади на модерацію (для Admin)
-const getPendingPlaces = async (req, res) => {
-    try {
-        const result = await db.query('SELECT * FROM places WHERE is_verified = false ORDER BY id DESC');
-        res.json(result.rows);
-    } catch (error) {
-        console.error('  Помилка отримання закладів на модерацію:', error);
-        res.status(500).json({ error: 'Помилка сервера' });
-    }
-};
-
-// 🛡️ 6. Затвердження закладу адміном
-const approvePlace = async (req, res) => {
-    const { id } = req.params;
-    try {
-        await db.query('UPDATE places SET is_verified = true WHERE id = $1', [id]);
-        res.json({ message: 'Заклад успішно підтверджено!' });
-    } catch (error) {
-        console.error('  Помилка підтвердження закладу:', error);
-        res.status(500).json({ error: 'Помилка сервера' });
-    }
-};
-
-// ⭐️ 7. Додавання / оновлення відгуку
+// ⭐️ 5. Додавання / оновлення відгуку
 const addReview = async (req, res) => {
     const place_id = req.params.id;
     const user_id = req.user.id;
@@ -103,7 +80,6 @@ const addReview = async (req, res) => {
       DO UPDATE SET rating = EXCLUDED.rating, comment = EXCLUDED.comment, created_at = NOW()
     `, [place_id, user_id, rating, comment || '']);
 
-        // Перераховуємо середній рейтинг закладу
         const avgRes = await db.query(
             'SELECT ROUND(AVG(rating)::numeric, 1) as avg_rating FROM reviews WHERE place_id = $1',
             [place_id]
@@ -114,12 +90,12 @@ const addReview = async (req, res) => {
 
         res.json({ message: 'Дякуємо за ваш відгук!', newRating });
     } catch (error) {
-        console.error('Помилка збереження відгуку:', error);
+        console.error('❌ Помилка збереження відгуку:', error);
         res.status(500).json({ error: 'Помилка сервера при збереженні відгуку' });
     }
 };
 
-// 💬 8. Отримання списку відгуків закладу
+// 💬 6. Список відгуків закладу
 const getPlaceReviews = async (req, res) => {
     const place_id = req.params.id;
     try {
@@ -133,7 +109,7 @@ const getPlaceReviews = async (req, res) => {
 
         res.json(result.rows);
     } catch (error) {
-        console.error('Помилка завантаження відгуків:', error);
+        console.error('❌ Помилка завантаження відгуків:', error);
         res.status(500).json({ error: 'Помилка сервера при отриманні відгуків' });
     }
 };
@@ -143,8 +119,6 @@ module.exports = {
     getPopularPlaces,
     getPlaceById,
     getMyPlaces,
-    getPendingPlaces,
-    approvePlace,
     addReview,
     getPlaceReviews
 };

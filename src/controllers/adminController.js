@@ -80,9 +80,48 @@ const getPendingPlaces = async (req, res) => {
     }
 };
 
+// 5. Загальна статистика платформи (для Admin)
+const getAdminStats = async (req, res) => {
+    try {
+        const placesRes = await db.query(`
+      SELECT 
+        COUNT(*)::int as total,
+        COUNT(CASE WHEN is_verified = true THEN 1 END)::int as verified,
+        COUNT(CASE WHEN is_verified = false THEN 1 END)::int as pending
+      FROM places
+    `);
+
+        const promosRes = await db.query(`
+      SELECT 
+        COUNT(*)::int as total,
+        COUNT(CASE WHEN is_active = true THEN 1 END)::int as active
+      FROM promotions
+    `);
+
+        const usersRes = await db.query(`
+      SELECT 
+        COUNT(*)::int as total,
+        COUNT(CASE WHEN role = 'user' THEN 1 END)::int as users_count,
+        COUNT(CASE WHEN role = 'merchant' THEN 1 END)::int as merchants_count,
+        COUNT(CASE WHEN role = 'admin' THEN 1 END)::int as admins_count
+      FROM users
+    `);
+
+        res.json({
+            places: placesRes.rows[0] || { total: 0, verified: 0, pending: 0 },
+            promotions: promosRes.rows[0] || { total: 0, active: 0 },
+            users: usersRes.rows[0] || { total: 0, users_count: 0, merchants_count: 0, admins_count: 0 }
+        });
+    } catch (error) {
+        console.error('❌ Помилка отримання статистики:', error);
+        res.status(500).json({ error: 'Помилка сервера при отриманні статистики' });
+    }
+};
+
 module.exports = {
     getAllUsers,
     updateUserRole,
     approvePlace,
-    getPendingPlaces
+    getPendingPlaces,
+    getAdminStats
 };

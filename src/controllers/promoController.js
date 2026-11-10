@@ -1,35 +1,58 @@
 const db = require('../config/db');
 
-// 1. Отримати всі акції (вже існує)
+// 1. Отримати всі акції з фільтрацією
 const getPromotions = async (req, res) => {
-    const { region_id, category_id } = req.query;
+    const { category_id, region_id, search } = req.query;
 
     try {
         let query = `
-      SELECT p.*, pl.name as place_name, pl.logo_url as place_logo 
+      SELECT 
+        p.id, 
+        p.title, 
+        p.description, 
+        p.discount_value, 
+        p.image_url,
+        p.link_url,
+        p.start_date, 
+        p.end_date, 
+        p.is_active,
+        pl.id AS place_id,
+        pl.name AS place_name, 
+        pl.address, 
+        pl.logo_url AS place_logo,
+        r.name AS region_name,
+        c.name AS category_name
       FROM promotions p
       JOIN places pl ON p.place_id = pl.id
-      WHERE pl.is_verified = true
+      JOIN regions r ON pl.region_id = r.id
+      JOIN categories c ON pl.category_id = c.id
+      WHERE p.is_active = TRUE AND pl.is_verified = TRUE
     `;
-        const params = [];
+
+        const values = [];
 
         if (region_id && region_id !== 'all' && region_id !== 'undefined') {
-            params.push(region_id);
-            query += ` AND pl.region_id = $${params.length}`;
+            values.push(region_id);
+            query += ` AND r.id = $${values.length}`;
         }
 
         if (category_id && category_id !== 'all' && category_id !== 'undefined') {
-            params.push(category_id);
-            query += ` AND pl.category_id = $${params.length}`;
+            values.push(category_id);
+            query += ` AND c.id = $${values.length}`;
         }
 
-        query += ' ORDER BY p.id DESC';
+        if (search && search.trim() !== '') {
+            values.push(`%${search.trim().toLowerCase()}%`);
+            query += ` AND (LOWER(p.title) LIKE $${values.length} OR LOWER(pl.name) LIKE $${values.length})`;
+        }
 
-        const result = await db.query(query, params);
+        query += ` ORDER BY p.id DESC`;
+
+        const result = await db.query(query, values);
         res.json(result.rows);
     } catch (error) {
-        console.error('Помилка завантаження акцій:', error);
-        res.status(500).json({ error: 'Помилка сервера' });
+        console.error('❌ Помилка при отриманні акцій:', error);
+        res.status(500).json({ error: 'Помилка сервера при отриманні акцій' });
     }
 };
 
@@ -46,7 +69,7 @@ const createPromotion = async (req, res) => {
 
         res.status(201).json(result.rows[0]);
     } catch (error) {
-        console.error('Помилка створення акції:', error);
+        console.error('❌ Помилка створення акції:', error);
         res.status(500).json({ error: 'Помилка сервера при створенні акції' });
     }
 };
@@ -54,12 +77,11 @@ const createPromotion = async (req, res) => {
 // 3. Редагування акції
 const updatePromotion = async (req, res) => {
     const { id } = req.params;
-    const { title, description, discount_value, is_active, start_date, end_date } = req.body;
+    const { title, description, discount_value, is_active, start_date, end_date, link_url } = req.body;
 
     try {
-        // Перевірка існування та власності
         const checkQuery = `
-      SELECT p.id, pl.user_id 
+      SELECT p.id, pl.merchant_id 
       FROM promotions p
       JOIN places pl ON p.place_id = pl.id
       WHERE p.id = $1
@@ -70,7 +92,7 @@ const updatePromotion = async (req, res) => {
             return res.status(404).json({ error: 'Акцію не знайдено' });
         }
 
-        if (checkResult.rows[0].user_id !== req.user.id && req.user.role !== 'admin') {
+        if (checkResult.rows[0].merchant_id !== req.user.id && req.user.role !== 'admin') {
             return res.status(403).json({ error: 'Немає прав для редагування цієї акції' });
         }
 
@@ -82,32 +104,40 @@ const updatePromotion = async (req, res) => {
         discount_value = COALESCE($3, discount_value),
         is_active = COALESCE($4, is_active),
         start_date = COALESCE($5, start_date),
-        end_date = COALESCE($6, end_date)
-      WHERE id = $7
+        end_date = COALESCE($6, end_date),
+        link_url = COALESCE($7, link_url)
+      WHERE id = $8
       RETURNING *
     `;
 
         const updated = await db.query(updateQuery, [
-            title, description, discount_value, is_active, start_date, end_date, id
+            title, description, discount_value, is_active, start_date, end_date, link_url, id
         ]);
 
-        res.json({
-            message: 'Акцію оновлено',
-            promotion: updated.rows[0]
-        });
+        res.json({ message: 'Акцію оновлено', promotion: updated.rows[0] });
     } catch (error) {
-        console.error('Помилка оновлення акції:', error);
+        console.error('❌ Помилка оновлення акції:', error);
         res.status(500).json({ error: 'Помилка сервера при оновленні акції' });
     }
 };
 
-// 4. Видалення (або деактивація) акції
+// 4. Видалення акції (для власника закладу або Admin)
 const deletePromotion = async (req, res) => {
     const { id } = req.params;
 
     try {
+        // Якщо запит робить Адміністратор — видаляємо одразу без перевірки власності
+        if (req.user && req.user.role === 'admin') {
+            const adminDelete = await db.query('DELETE FROM promotions WHERE id = $1 RETURNING *', [id]);
+            if (adminDelete.rows.length === 0) {
+                return res.status(404).json({ error: 'Акцію не знайдено' });
+            }
+            return res.json({ message: 'Акцію успішно видалено адміністратором' });
+        }
+
+        // Якщо це Merchant — перевіряємо, чи належить акція його закладу
         const checkQuery = `
-      SELECT p.id, pl.user_id 
+      SELECT p.id, pl.merchant_id 
       FROM promotions p
       JOIN places pl ON p.place_id = pl.id
       WHERE p.id = $1
@@ -118,70 +148,15 @@ const deletePromotion = async (req, res) => {
             return res.status(404).json({ error: 'Акцію не знайдено' });
         }
 
-        if (checkResult.rows[0].user_id !== req.user.id && req.user.role !== 'admin') {
+        if (checkResult.rows[0].merchant_id !== req.user.id) {
             return res.status(403).json({ error: 'Немає прав для видалення цієї акції' });
         }
 
         await db.query('DELETE FROM promotions WHERE id = $1', [id]);
-
         res.json({ message: 'Акцію успішно видалено' });
     } catch (error) {
-        console.error('Помилка видалення акції:', error);
+        console.error('❌ Помилка видалення акції:', error);
         res.status(500).json({ error: 'Помилка сервера при видаленні акції' });
-    }
-};
-
-// 1. Додавання / оновлення відгуку
-const addReview = async (req, res) => {
-    const place_id = req.params.id;
-    const user_id = req.user.id; // Отримуємо з JWT токена
-    const { rating, comment } = req.body;
-
-    try {
-        if (!rating || rating < 1 || rating > 5) {
-            return res.status(400).json({ error: 'Оцінка має бути від 1 до 5 зірок' });
-        }
-
-        // Зберігаємо або оновлюємо відгук користувача
-        await db.query(`
-      INSERT INTO reviews (place_id, user_id, rating, comment)
-      VALUES ($1, $2, $3, $4)
-      ON CONFLICT (place_id, user_id) 
-      DO UPDATE SET rating = EXCLUDED.rating, comment = EXCLUDED.comment, created_at = NOW()
-    `, [place_id, user_id, rating, comment || '']);
-
-        // Автоматично перераховуємо середній рейтинг закладу у таблиці places
-        const avgRes = await db.query(
-            'SELECT ROUND(AVG(rating)::numeric, 1) as avg_rating FROM reviews WHERE place_id = $1',
-            [place_id]
-        );
-        const newRating = avgRes.rows[0].avg_rating || 0;
-
-        await db.query('UPDATE places SET rating = $1 WHERE id = $2', [newRating, place_id]);
-
-        res.json({ message: 'Дякуємо за ваш відгук!', newRating });
-    } catch (error) {
-        console.error('Помилка збереження відгуку:', error);
-        res.status(500).json({ error: 'Помилка сервера при збереженні відгуку' });
-    }
-};
-
-// 2. Отримання списку відгуків закладу
-const getPlaceReviews = async (req, res) => {
-    const place_id = req.params.id;
-    try {
-        const result = await db.query(`
-      SELECT r.id, r.rating, r.comment, r.created_at, u.full_name 
-      FROM reviews r
-      JOIN users u ON r.user_id = u.id
-      WHERE r.place_id = $1
-      ORDER BY r.created_at DESC
-    `, [place_id]);
-
-        res.json(result.rows);
-    } catch (error) {
-        console.error('Помилка завантаження відгуків:', error);
-        res.status(500).json({ error: 'Помилка сервера при отриманні відгуків' });
     }
 };
 
@@ -189,7 +164,5 @@ module.exports = {
     getPromotions,
     createPromotion,
     updatePromotion,
-    deletePromotion,
-    addReview,
-    getPlaceReviews
+    deletePromotion
 };
