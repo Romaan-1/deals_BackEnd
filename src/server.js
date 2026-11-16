@@ -12,6 +12,8 @@ const app = express();
 // Базові мідлвари
 app.use(cors());
 app.use(express.json());
+const swaggerDocument = require('./config/swagger');
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 // 📁 Створення та публічна роздача папки /uploads для збереження фото
 const uploadDir = path.join(__dirname, '../uploads');
@@ -38,18 +40,6 @@ app.post('/api/upload', upload.single('image'), (req, res) => {
     const imageUrl = `http://localhost:5000/uploads/${req.file.filename}`;
     res.json({ imageUrl });
 });
-
-// 📖 Повна Swagger документація
-const swaggerDocument = {
-    openapi: '3.0.0',
-    info: { title: 'LocaSale API', version: '1.0.0', description: 'REST API платформи акцій' },
-    servers: [{ url: 'http://localhost:5000/api' }],
-    paths: {
-        '/regions': { get: { summary: 'Список міст' }, post: { summary: 'Створити місто' } },
-        '/promotions': { get: { summary: 'Список акцій' }, post: { summary: 'Додати акцію' } }
-    }
-};
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 // 🔗 Маршрути API
 const promoRoutes = require('./routes/promoRoutes');
