@@ -1,5 +1,7 @@
 const jwt = require('jsonwebtoken');
 
+const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_key_2026';
+
 const verifyToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -9,8 +11,7 @@ const verifyToken = (req, res, next) => {
     }
 
     try {
-        const jwtSecret = process.env.JWT_SECRET || 'fallback_secret_key_2026';
-        const verified = jwt.verify(token, jwtSecret);
+        const verified = jwt.verify(token, JWT_SECRET);
         req.user = verified;
         next();
     } catch (error) {

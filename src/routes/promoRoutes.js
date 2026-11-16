@@ -32,6 +32,7 @@ router.post('/places', verifyToken, requireMerchant, placeController.createPlace
 // ⭐️ ВІДГУКИ
 router.get('/places/:id/reviews', placeController.getPlaceReviews);
 router.post('/places/:id/reviews', verifyToken, placeController.addReview);
+router.delete('/reviews/:reviewId', verifyToken, placeController.deleteReview);
 
 // 🔥 АКЦІЇ
 router.get('/promotions', promoController.getPromotions);

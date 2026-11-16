@@ -20,25 +20,27 @@ const getPromotions = async (req, res) => {
         pl.name AS place_name, 
         pl.address, 
         pl.logo_url AS place_logo,
+        pl.category_id,
+        pl.region_id,
         r.name AS region_name,
         c.name AS category_name
       FROM promotions p
       JOIN places pl ON p.place_id = pl.id
-      JOIN regions r ON pl.region_id = r.id
-      JOIN categories c ON pl.category_id = c.id
+      LEFT JOIN regions r ON pl.region_id = r.id
+      LEFT JOIN categories c ON pl.category_id = c.id
       WHERE p.is_active = TRUE AND pl.is_verified = TRUE
     `;
 
         const values = [];
 
-        if (region_id && region_id !== 'all' && region_id !== 'undefined') {
-            values.push(region_id);
-            query += ` AND r.id = $${values.length}`;
+        if (region_id && !isNaN(Number(region_id))) {
+            values.push(Number(region_id));
+            query += ` AND pl.region_id = $${values.length}`;
         }
 
-        if (category_id && category_id !== 'all' && category_id !== 'undefined') {
-            values.push(category_id);
-            query += ` AND c.id = $${values.length}`;
+        if (category_id && !isNaN(Number(category_id))) {
+            values.push(Number(category_id));
+            query += ` AND pl.category_id = $${values.length}`;
         }
 
         if (search && search.trim() !== '') {

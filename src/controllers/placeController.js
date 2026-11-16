@@ -10,11 +10,13 @@ const createPlace = async (req, res) => {
             return res.status(400).json({ error: 'Заповніть усі обов\'язкові поля' });
         }
 
+        const slug = `place-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
         const result = await db.query(
-            `INSERT INTO places (name, address, category_id, region_id, merchant_id, logo_url, is_verified) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7) 
+            `INSERT INTO places (name, slug, address, category_id, region_id, merchant_id, logo_url, is_verified) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
        RETURNING *`,
-            [name, address, parseInt(category_id, 10), parseInt(region_id, 10), merchant_id, logo_url || '', true]
+            [name, slug, address, parseInt(category_id, 10), parseInt(region_id, 10), merchant_id, logo_url || '🏬', true]
         );
 
         res.status(201).json(result.rows[0]);
@@ -24,10 +26,19 @@ const createPlace = async (req, res) => {
     }
 };
 
-// 🔥 2. Популярні заклади
+// 🔥 2. Популярні заклади для головної сторінки
 const getPopularPlaces = async (req, res) => {
     try {
-        const result = await db.query('SELECT * FROM places WHERE is_verified = true ORDER BY rating DESC LIMIT 10');
+        const query = `
+      SELECT p.*, COUNT(pr.id)::int AS active_promos_count
+      FROM places p
+      LEFT JOIN promotions pr ON pr.place_id = p.id AND pr.is_active = TRUE
+      WHERE p.is_verified = TRUE
+      GROUP BY p.id
+      ORDER BY p.rating DESC
+      LIMIT 10
+    `;
+        const result = await db.query(query);
         res.json(result.rows);
     } catch (error) {
         console.error('❌ Помилка завантаження закладів:', error);
@@ -35,26 +46,48 @@ const getPopularPlaces = async (req, res) => {
     }
 };
 
-// 📌 3. Отримання закладу за ID
+// 📌 3. Отримання закладу за ID та його активних акцій (формат { place, promotions })
 const getPlaceById = async (req, res) => {
     const { id } = req.params;
     try {
-        const result = await db.query('SELECT * FROM places WHERE id = $1', [id]);
-        if (result.rows.length === 0) {
+        const placeQuery = `
+      SELECT p.*, r.name AS region_name, c.name AS category_name
+      FROM places p
+      LEFT JOIN regions r ON p.region_id = r.id
+      LEFT JOIN categories c ON p.category_id = c.id
+      WHERE p.id = $1
+    `;
+        const placeResult = await db.query(placeQuery, [id]);
+
+        if (placeResult.rows.length === 0) {
             return res.status(404).json({ error: 'Заклад не знайдено' });
         }
-        res.json(result.rows[0]);
+
+        const promosQuery = `
+      SELECT * FROM promotions 
+      WHERE place_id = $1 AND is_active = TRUE 
+      ORDER BY id DESC
+    `;
+        const promosResult = await db.query(promosQuery, [id]);
+
+        res.json({
+            place: placeResult.rows[0],
+            promotions: promosResult.rows
+        });
     } catch (error) {
-        console.error('❌ Помилка отримання закладу:', error);
+        console.error('❌ Помилка отримання сторінки закладу:', error);
         res.status(500).json({ error: 'Помилка сервера' });
     }
 };
 
-// 💼 4. Мої заклади (для продавця)
+// 💼 4. Мої заклади (для кабінету продавця)
 const getMyPlaces = async (req, res) => {
     const merchant_id = req.user.id;
     try {
-        const result = await db.query('SELECT * FROM places WHERE merchant_id = $1 ORDER BY id DESC', [merchant_id]);
+        const result = await db.query(
+            'SELECT * FROM places WHERE merchant_id = $1 ORDER BY id DESC',
+            [merchant_id]
+        );
         res.json(result.rows);
     } catch (error) {
         console.error('❌ Помилка завантаження моїх закладів:', error);
@@ -95,12 +128,12 @@ const addReview = async (req, res) => {
     }
 };
 
-// 💬 6. Список відгуків закладу
+// 💬 6. Список відгуків закладу (з user_id для перевірки автора)
 const getPlaceReviews = async (req, res) => {
     const place_id = req.params.id;
     try {
         const result = await db.query(`
-      SELECT r.id, r.rating, r.comment, r.created_at, u.full_name 
+      SELECT r.id, r.place_id, r.user_id, r.rating, r.comment, r.created_at, u.full_name 
       FROM reviews r
       JOIN users u ON r.user_id = u.id
       WHERE r.place_id = $1
@@ -114,11 +147,48 @@ const getPlaceReviews = async (req, res) => {
     }
 };
 
+// 🗑️ 7. Видалення відгуку (admin — будь-який, звичайний користувач — лише свій)
+const deleteReview = async (req, res) => {
+    const { reviewId } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    try {
+        const reviewRes = await db.query('SELECT * FROM reviews WHERE id = $1', [reviewId]);
+        if (reviewRes.rows.length === 0) {
+            return res.status(404).json({ error: 'Відгук не знайдено' });
+        }
+
+        const review = reviewRes.rows[0];
+
+        if (userRole !== 'admin' && Number(review.user_id) !== Number(userId)) {
+            return res.status(403).json({ error: 'Ви можете видаляти лише власні відгуки' });
+        }
+
+        await db.query('DELETE FROM reviews WHERE id = $1', [reviewId]);
+
+        // Перераховуємо середній рейтинг закладу після видалення
+        const avgRes = await db.query(
+            'SELECT COALESCE(ROUND(AVG(rating)::numeric, 1), 4.5) AS avg_rating FROM reviews WHERE place_id = $1',
+            [review.place_id]
+        );
+        const newRating = avgRes.rows[0].avg_rating;
+
+        await db.query('UPDATE places SET rating = $1 WHERE id = $2', [newRating, review.place_id]);
+
+        res.json({ message: 'Відгук видалено', newRating });
+    } catch (error) {
+        console.error('❌ Помилка видалення відгуку:', error);
+        res.status(500).json({ error: 'Помилка сервера при видаленні відгуку' });
+    }
+};
+
 module.exports = {
     createPlace,
     getPopularPlaces,
     getPlaceById,
     getMyPlaces,
     addReview,
-    getPlaceReviews
+    getPlaceReviews,
+    deleteReview
 };
