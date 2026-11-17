@@ -60,19 +60,75 @@ const getPromotions = async (req, res) => {
 
 // 2. Створення нової акції
 const createPromotion = async (req, res) => {
-    const { place_id, title, description, discount_value, image_url, link_url, start_date, end_date } = req.body;
+    const {
+        place_id,
+        title,
+        description,
+        discount_value,
+        image_url,
+        link_url,
+        start_date,
+        end_date
+    } = req.body;
 
     try {
-        const result = await db.query(
-            `INSERT INTO promotions (place_id, title, description, discount_value, image_url, link_url, start_date, end_date)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-            [place_id, title, description || '', discount_value, image_url || '', link_url || '', start_date, end_date]
-        );
+        if (!place_id || !title) {
+            return res.status(400).json({ error: 'Вкажіть заклад та заголовок акції' });
+        }
 
+        const colsRes = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'promotions'
+    `);
+        const existingCols = new Set(colsRes.rows.map((r) => r.column_name));
+
+        const fields = ['place_id', 'title', 'description', 'discount_value'];
+        const values = [
+            Number(place_id),
+            title,
+            description || '',
+            discount_value || 'Знижка'
+        ];
+
+        if (existingCols.has('image_url')) {
+            fields.push('image_url');
+            values.push(image_url || '🎁');
+        }
+
+        if (existingCols.has('link_url')) {
+            fields.push('link_url');
+            values.push(link_url || null);
+        }
+
+        if (existingCols.has('start_date')) {
+            fields.push('start_date');
+            values.push(start_date || new Date());
+        }
+
+        if (existingCols.has('end_date')) {
+            fields.push('end_date');
+            const defaultEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+            values.push(end_date || defaultEnd);
+        }
+
+        if (existingCols.has('is_active')) {
+            fields.push('is_active');
+            values.push(true);
+        }
+
+        const placeholders = values.map((_, idx) => `$${idx + 1}`).join(', ');
+        const query = `
+      INSERT INTO promotions (${fields.join(', ')})
+      VALUES (${placeholders})
+      RETURNING *
+    `;
+
+        const result = await pool.query(query, values);
         res.status(201).json(result.rows[0]);
-    } catch (error) {
-        console.error('❌ Помилка створення акції:', error);
-        res.status(500).json({ error: 'Помилка сервера при створенні акції' });
+    } catch (err) {
+        console.error('ДЕТАЛЬНА ПОМИЛКА СТВОРЕННЯ АКЦІЇ:', err.message);
+        res.status(500).json({ error: err.message });
     }
 };
 
