@@ -76,7 +76,7 @@ const createPromotion = async (req, res) => {
             return res.status(400).json({ error: 'Вкажіть заклад та заголовок акції' });
         }
 
-        const colsRes = await pool.query(`
+        const colsRes = await db.query(`
       SELECT column_name 
       FROM information_schema.columns 
       WHERE table_name = 'promotions'
@@ -124,7 +124,7 @@ const createPromotion = async (req, res) => {
       RETURNING *
     `;
 
-        const result = await pool.query(query, values);
+        const result = await db.query(query, values);
         res.status(201).json(result.rows[0]);
     } catch (err) {
         console.error('ДЕТАЛЬНА ПОМИЛКА СТВОРЕННЯ АКЦІЇ:', err.message);
